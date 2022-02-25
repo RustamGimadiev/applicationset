@@ -12,6 +12,7 @@ import (
 	argoprojiov1alpha1 "github.com/argoproj/applicationset/api/v1alpha1"
 	"github.com/argoproj/applicationset/pkg/utils"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
@@ -114,6 +115,11 @@ func (g *DuckTypeGenerator) GenerateParams(appSetGenerator *argoprojiov1alpha1.A
 
 	duckGVR := schema.GroupVersionResource{Group: group, Version: version, Resource: kind}
 
+	scope, ok := cm.Data["scope"]
+	if !ok {
+		scope = "Namespaced"
+	}
+
 	listOptions := metav1.ListOptions{}
 	if resourceName == "" {
 		listOptions.LabelSelector = metav1.FormatLabelSelector(&labelSelector)
@@ -124,7 +130,12 @@ func (g *DuckTypeGenerator) GenerateParams(appSetGenerator *argoprojiov1alpha1.A
 		log.WithField("listOptions.FieldSelector", listOptions.FieldSelector).Info("selection type")
 	}
 
-	duckResources, err := g.dynClient.Resource(duckGVR).Namespace(g.namespace).List(g.ctx, listOptions)
+	duckResources := &unstructured.UnstructuredList{}
+	if scope == "Cluster" {
+		duckResources, err = g.dynClient.Resource(duckGVR).List(g.ctx, listOptions)
+	} else {
+		duckResources, err = g.dynClient.Resource(duckGVR).Namespace(g.namespace).List(g.ctx, listOptions)
+	}
 
 	if err != nil {
 		log.WithField("GVK", duckGVR).Warning("resources were not found")
